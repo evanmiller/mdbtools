@@ -35,6 +35,7 @@ static iconv_t iconv_in,iconv_out;
 #endif //ENABLE_ODBC_W
 
 static SQLSMALLINT _odbc_get_client_type(MdbColumn *col);
+static const char * _odbc_get_client_type_name(MdbColumn *col);
 static int _odbc_fix_literals(struct _hstmt *stmt);
 //static int _odbc_get_server_type(int clt_type);
 static int _odbc_get_string_size(int size, SQLCHAR *str);
@@ -748,7 +749,7 @@ static SQLRETURN SQL_API _SQLDescribeCol(
     SQLSMALLINT       *pibScale,
     SQLSMALLINT       *pfNullable)
 {
-	int namelen, i;
+	int i;
 	struct _hstmt *stmt = (struct _hstmt *) hstmt;
 	MdbSQL *sql = stmt->sql;
 	MdbSQLColumn *sqlcol;
@@ -776,23 +777,14 @@ static SQLRETURN SQL_API _SQLDescribeCol(
 	}
 
 	ret = SQL_SUCCESS;
-	namelen = strlen(sqlcol->name);
 	if (pcbColName)
-		*pcbColName=namelen;
+		*pcbColName=strlen(sqlcol->name);
 	if (szColName) {
 		if (cbColNameMax < 0) {
 			strcpy(sqlState, "HY090"); // Invalid string or buffer length
 			return SQL_ERROR;
 		}
-		if (namelen + 1 < cbColNameMax) {
-			// Including \0
-			strcpy((char*)szColName, sqlcol->name);
-		} else {
-			if (cbColNameMax > 1) {
-				strncpy((char*)szColName, sqlcol->name, cbColNameMax-1);
-				szColName[cbColNameMax-1] = '\0';
-			}
-			// So there is no \0 if cbColNameMax was 0
+		if (snprintf(szColName, cbColNameMax, "%s", sqlcol->name) + 1 > cbColNameMax) {
 			strcpy(sqlState, "01004"); // String data, right truncated
 			ret = SQL_SUCCESS_WITH_INFO;
 		}
@@ -864,7 +856,7 @@ static SQLRETURN SQL_API _SQLColAttributes(
     SQLSMALLINT       *pcbDesc,
     SQLLEN            *pfDesc)
 {
-	int namelen, i;
+	int i;
 	struct _hstmt *stmt;
 	MdbSQL *sql;
 	MdbSQLColumn *sqlcol;
@@ -913,15 +905,7 @@ static SQLRETURN SQL_API _SQLColAttributes(
 				strcpy(sqlState, "HY090"); // Invalid string or buffer length
 				return SQL_ERROR;
 			}
-			namelen = strlen(sqlcol->name);
-			if (namelen + 1 < cbDescMax) {
-				strcpy(rgbDesc, sqlcol->name);
-			} else {
-				if (cbDescMax > 1) {
-					strncpy(rgbDesc, sqlcol->name, cbDescMax-1);
-					((char*)rgbDesc)[cbDescMax-1] = '\0';
-				}
-				// So there is no \0 if cbDescMax was 0
+			if (snprintf(rgbDesc, cbDescMax, "%s", sqlcol->name) + 1 > cbDescMax) {
 				strcpy(sqlState, "01004"); // String data, right truncated
 				ret = SQL_SUCCESS_WITH_INFO;
 			}
@@ -930,6 +914,13 @@ static SQLRETURN SQL_API _SQLColAttributes(
 			//*pfDesc = SQL_CHAR;
 			*pfDesc = _odbc_get_client_type(col);
 			break;
+		case SQL_COLUMN_TYPE_NAME:
+		{
+			const char *type_name = _odbc_get_client_type_name(col);
+			if (type_name)
+				snprintf(rgbDesc, cbDescMax, "%s", type_name);
+			break;
+		}
 		case SQL_COLUMN_LENGTH:
 			break;
 		case SQL_COLUMN_DISPLAY_SIZE: /* =SQL_DESC_DISPLAY_SIZE */
@@ -2484,3 +2475,44 @@ static SQLSMALLINT _odbc_get_client_type(MdbColumn *col)
 	}
 	return -1;
 }
+
+static const char * _odbc_get_client_type_name(MdbColumn *col)
+{
+	switch (col->col_type) {
+		case MDB_BOOL:
+			return "BOOL";
+		case MDB_BYTE:
+			return "BYTE";
+		case MDB_INT:
+			return "INT";
+		case MDB_LONGINT:
+			return "LONGINT";
+		case MDB_MONEY:
+			return "MONEY";
+		case MDB_FLOAT:
+			return "FLOAT";
+		case MDB_DOUBLE:
+			return "DOUBLE";
+		case MDB_DATETIME:
+			return "DATETIME";
+		case MDB_TEXT:
+			return "TEXT";
+		case MDB_BINARY:
+			return "BINARY";
+		case MDB_MEMO:
+			return "MEMO";
+		case MDB_OLE:
+			return "OLE";
+		case MDB_REPID:
+			return "REPID";
+		case MDB_NUMERIC:
+			return "NUMERIC";
+		case MDB_COMPLEX:
+			return "COMPLEX";
+		default:
+			// fprintf(stderr,"Unknown type %d\n",srv_type);
+			break;
+	}
+	return NULL;
+}
+
