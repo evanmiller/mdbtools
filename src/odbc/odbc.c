@@ -200,7 +200,6 @@ SQLRETURN SQL_API SQLDriverConnect(
     SQLSMALLINT    *pcbConnStrOut,
     SQLUSMALLINT       fDriverCompletion)
 {
-	char* dsn = NULL;
 	char* database = NULL;
 	ConnectParams* params;
 	SQLRETURN ret;
@@ -210,11 +209,7 @@ SQLRETURN SQL_API SQLDriverConnect(
 
 	params = ((struct _hdbc*) hdbc)->params;
 
-	if ((dsn = ExtractDSN (params, (gchar*)szConnStrIn))) {
-		if (!LookupDSN (params, dsn)){
-			LogError ("Could not find DSN in odbc.ini");
-			return SQL_ERROR;
-		}
+	if (ExtractDSN(params, (gchar*)szConnStrIn)) {
 		SetConnectString (params, (gchar*)szConnStrIn);
 		if (!(database = GetConnectParam (params, "Database"))){
 			LogError ("Could not find Database parameter in '%s'", szConnStrIn);
@@ -471,7 +466,6 @@ SQLRETURN SQL_API SQLSetEnvAttr (
 	return SQL_SUCCESS;
 }
 
-
 SQLRETURN SQL_API SQLBindParameter(
     SQLHSTMT           hstmt,
     SQLUSMALLINT       ipar,
@@ -489,26 +483,6 @@ SQLRETURN SQL_API SQLBindParameter(
 	TRACE("SQLBindParameter");
 	/*stmt = (struct _hstmt *) hstmt;*/
 	return SQL_SUCCESS;
-}
-
-SQLRETURN SQL_API SQLAllocHandle(    
-    SQLSMALLINT HandleType,
-    SQLHANDLE InputHandle,
-    SQLHANDLE * OutputHandle)
-{
-	TRACE("SQLAllocHandle");
-	switch(HandleType) {
-		case SQL_HANDLE_STMT:
-			return SQLAllocStmt(InputHandle,OutputHandle);
-			break;
-		case SQL_HANDLE_DBC:
-			return SQLAllocConnect(InputHandle,OutputHandle);
-			break;
-		case SQL_HANDLE_ENV:
-			return SQLAllocEnv(OutputHandle);
-			break;
-	}
-	return SQL_ERROR;
 }
 
 SQLRETURN SQL_API SQLAllocConnect(
@@ -561,6 +535,27 @@ SQLRETURN SQL_API SQLAllocStmt(
 
 	*phstmt = stmt;
 	return SQL_SUCCESS;
+}
+
+SQLRETURN SQL_API SQLAllocHandle(
+    SQLSMALLINT HandleType,
+    SQLHANDLE InputHandle,
+    SQLHANDLE * OutputHandle)
+{
+    SQLRETURN retval = SQL_ERROR;
+	TRACE("SQLAllocHandle");
+	switch(HandleType) {
+		case SQL_HANDLE_STMT:
+			retval = SQLAllocStmt(InputHandle,OutputHandle);
+			break;
+		case SQL_HANDLE_DBC:
+			retval = SQLAllocConnect(InputHandle,OutputHandle);
+			break;
+		case SQL_HANDLE_ENV:
+			retval = SQLAllocEnv(OutputHandle);
+			break;
+	}
+	return retval;
 }
 
 SQLRETURN SQL_API SQLBindCol(
@@ -639,12 +634,7 @@ SQLRETURN SQL_API SQLConnect(
 
 	params->dsnName = g_string_assign (params->dsnName, (gchar*)szDSN);
 
-	if (!LookupDSN (params, (gchar*)szDSN))
-	{
-		LogError ("Could not find DSN in odbc.ini");
-		return SQL_ERROR;
-	}
-	else if (!(database = GetConnectParam (params, "Database")))
+	if (!(database = GetConnectParam (params, "Database")))
 	{
 		LogError ("Could not find Database parameter in '%s'", szDSN);
 		return SQL_ERROR;
@@ -849,7 +839,7 @@ SQLRETURN SQL_API SQLColAttributes(
 		{
 			const char *type_name = _odbc_get_client_type_name(col);
 			if (type_name)
-				snprintf(rgbDesc, cbDescMax, "%s", type_name);
+				*pcbDesc = snprintf(rgbDesc, cbDescMax, "%s", type_name);
 			break;
 		}
 		case SQL_COLUMN_LENGTH:
@@ -1101,25 +1091,6 @@ SQLRETURN SQL_API SQLFetch(
 	}
 }
 
-SQLRETURN SQL_API SQLFreeHandle(    
-    SQLSMALLINT HandleType,
-    SQLHANDLE Handle)
-{
-	TRACE("SQLFreeHandle");
-	switch(HandleType) {
-		case SQL_HANDLE_STMT:
-			SQLFreeStmt(Handle,SQL_DROP);
-			break;
-		case SQL_HANDLE_DBC:
-			SQLFreeConnect(Handle);
-			break;
-		case SQL_HANDLE_ENV:
-			SQLFreeEnv(Handle);
-			break;
-	}
-   return SQL_SUCCESS;
-}
-
 SQLRETURN SQL_API SQLFreeConnect(
     SQLHDBC            hdbc)
 {
@@ -1187,6 +1158,26 @@ SQLRETURN SQL_API SQLFreeStmt(
 	} else {
 	}
 	return SQL_SUCCESS;
+}
+
+SQLRETURN SQL_API SQLFreeHandle(
+    SQLSMALLINT HandleType,
+    SQLHANDLE Handle)
+{
+    SQLRETURN retval = SQL_ERROR;
+	TRACE("SQLFreeHandle");
+	switch(HandleType) {
+		case SQL_HANDLE_STMT:
+			retval = SQLFreeStmt(Handle,SQL_DROP);
+			break;
+		case SQL_HANDLE_DBC:
+			retval = SQLFreeConnect(Handle);
+			break;
+		case SQL_HANDLE_ENV:
+			retval = SQLFreeEnv(Handle);
+			break;
+	}
+   return retval;
 }
 
 SQLRETURN SQL_API SQLGetStmtAttr (
@@ -1349,7 +1340,8 @@ SQLRETURN SQL_API SQLColumns(
 
 			ts2 = mdb_ascii2unicode(mdb, table->name, 0, (char*)t2, MDB_BIND_SIZE);
 			ts3 = mdb_ascii2unicode(mdb, col->name, 0, (char*)t3, MDB_BIND_SIZE);
-			ts5 = mdb_ascii2unicode(mdb, "FIX ME", 0,  (char*)t5, MDB_BIND_SIZE);
+			ts5 = mdb_ascii2unicode(mdb, _odbc_get_client_type_name(col), 0,  (char*)t5, MDB_BIND_SIZE);
+
 			nullable = SQL_NO_NULLS;
 			datatype = _odbc_get_client_type(col);
 			sqldatatype = _odbc_get_client_type(col);
@@ -1649,14 +1641,26 @@ SQLRETURN SQL_API SQLGetData(
 				return SQL_SUCCESS_WITH_INFO;
 			}
 
+			/* if the column type is OLE, then we don't add terminators
+			  see https://docs.microsoft.com/en-us/sql/odbc/reference/syntax/sqlgetdata-function?view=sql-server-ver15
+			  and https://www.ibm.com/support/knowledgecenter/SSEPEK_11.0.0/odbc/src/tpc/db2z_fngetdata.html
+
+			  "The buffer that the rgbValue argument specifies contains nul-terminated values, unless you retrieve
+			  binary data, or the SQL data type of the column is graphic (DBCS) and the C buffer type is SQL_C_CHAR."
+			*/
+			const int needsTerminator = (col->col_type != MDB_OLE);
+
 			const int totalSizeRemaining = len - stmt->pos;
-			const int partsRemain = cbValueMax - 1 < totalSizeRemaining;
-			const int sizeToReadThisPart = partsRemain ? cbValueMax - 1 : totalSizeRemaining;
+			const int partsRemain = cbValueMax - ( needsTerminator ? 1 : 0 ) < totalSizeRemaining;
+			const int sizeToReadThisPart = partsRemain ? cbValueMax - ( needsTerminator ? 1 : 0 ) : totalSizeRemaining;
 			memcpy(rgbValue, str + stmt->pos, sizeToReadThisPart);
 
-			((char *)rgbValue)[sizeToReadThisPart] = '\0';
+			if (needsTerminator)
+			{
+				((char *)rgbValue)[sizeToReadThisPart] = '\0';
+			}
 			if (partsRemain) {
-			        stmt->pos += cbValueMax - 1;
+				stmt->pos += cbValueMax - ( needsTerminator ? 1 : 0 );
 				if (col->col_type != MDB_OLE) { free(str); str = NULL; }
 				strcpy(sqlState, "01004"); // truncated
 				return SQL_SUCCESS_WITH_INFO;

@@ -74,7 +74,7 @@ AM_CONDITIONAL(SQL, test x$sql = xtrue)
 AC_SUBST(SQL)
 AC_SUBST(LFLAGS)
 
-CFLAGS="$CFLAGS -Wall -Wstrict-prototypes -Werror"
+CFLAGS="$CFLAGS -Wall -Werror"
 AS_CASE([$host],
         [*mingw*|*cygwin*], [LDFLAGS="$LDFLAGS -no-undefined"], [])
 AS_CASE([$host],
@@ -127,14 +127,13 @@ if test "$with_iodbc"; then
 	HAVE_ODBC=true
 	ODBC_CFLAGS=$(iodbc-config --prefix="$with_iodbc" --cflags)
 	ODBC_LIBS=$(iodbc-config --prefix="$with_iodbc" --libs)
+	ODBC_LDFLAGS=""
 	CFLAGS="$CFLAGS -DIODBC"
 
 	OLDLDFLAGS=$LDFLAGS
 	LDFLAGS="$LDFLAGS $ODBC_LIBS"
-	AC_CHECK_LIB(iodbcinst, SQLGetPrivateProfileString,
-	 [ODBC_LIBS="$ODBC_LIBS -liodbcinst"
-	 AC_DEFINE_UNQUOTED(HAVE_SQLGETPRIVATEPROFILESTRING, 1,
-	 [Define to 1 if you have the SQLGetPrivateProfileString function.])])
+	AC_CHECK_LIB(iodbcinst, SQLGetPrivateProfileString, [FOO=bar],
+                 AC_MSG_ERROR([Could not find SQLGetPrivateProfileString in -liodbcinst]))
 	LDFLAGS=$OLDLDFLAGS
 fi
 
@@ -154,10 +153,18 @@ if test "$with_unixodbc"; then
 
 	OLDLDFLAGS=$LDFLAGS
 	LDFLAGS="$LDFLAGS $ODBC_LIBS"
-	AC_CHECK_LIB(odbcinst, SQLGetPrivateProfileString,
-	 [ODBC_LIBS="$ODBC_LIBS -lodbcinst"
-	 AC_DEFINE_UNQUOTED(HAVE_SQLGETPRIVATEPROFILESTRING, 1,
-	 [Define to 1 if you have the SQLGetPrivateProfileString function.])])
+	AC_CHECK_LIB(odbcinst, SQLGetPrivateProfileString, [ODBC_LIBS="$ODBC_LIBS -lodbcinst"],
+                 AC_MSG_ERROR([Could not find SQLGetPrivateProfileString in -lodbcinst]))
+	LDFLAGS=$OLDLDFLAGS
+
+	OLDLDFLAGS=$LDFLAGS
+	LDFLAGS="$LDFLAGS -Wl,-Bsymbolic-functions"
+	AC_MSG_CHECKING([for -Bsymbolic-functions linker flag])
+	AC_LINK_IFELSE([AC_LANG_PROGRAM([], [])],
+				[AC_MSG_RESULT(yes)
+				ODBC_LDFLAGS="-Wl,-Bsymbolic-functions"],
+				[AC_MSG_RESULT(no)
+				ODBC_LDFLAGS=""])
 	LDFLAGS=$OLDLDFLAGS
 fi
 
@@ -170,8 +177,12 @@ if test "x$HAVE_ODBC" = "xtrue"; then
 
 	AC_SUBST(ODBC_CFLAGS)
 	AC_SUBST(ODBC_LIBS)
+	AC_SUBST(ODBC_LDFLAGS)
 	OPTDIRS="$OPTDIRS odbc"
 fi
+
+dnl Turn on -Wstrict-prototypes here because AC_CHECK_LIB is dumb
+CFLAGS="$CFLAGS -Wstrict-prototypes"
 
 dnl Conditionally build odbc wide version
 AM_CONDITIONAL(ICONV, test "$am_cv_func_iconv" = "yes")
