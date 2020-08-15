@@ -4,6 +4,6 @@ EXTRA_PROGRAMS = fuzz_mdb
 nodist_EXTRA_fuzz_mdb_SOURCES = dummy.cxx
 fuzz_mdb_SOURCES = fuzz_mdb.c
 
-AM_CFLAGS = -I$(top_srcdir)/include $(GLIB_CFLAGS)
+AM_CFLAGS = -I$(top_srcdir)/include $(GLIB_CFLAGS) -g
 AM_LDFLAGS = -static
 LDADD = ../libmdb/libmdb.la @LIB_FUZZING_ENGINE@
