@@ -82,8 +82,10 @@ jobs:
       homebrew:
         packages:
         - libiodbc
+        - bison
     env:
       - CONFIGURE_FLAGS="--with-iodbc=/usr/local/opt --disable-glib"
+      - YACC="/usr/local/opt/bison/bin/bison"
   - compiler: clang
     os: osx
     osx_image: xcode11.4
@@ -92,8 +94,10 @@ jobs:
         packages:
         - libiodbc
         - glib
+        - bison
     env:
       - CONFIGURE_FLAGS="--with-iodbc=/usr/local/opt --enable-glib"
+      - YACC="/usr/local/opt/bison/bin/bison"
   - compiler: clang
     os: osx
     osx_image: xcode11.4
@@ -101,8 +105,10 @@ jobs:
       homebrew:
         packages:
         - unixodbc
+        - bison
     env:
       - CONFIGURE_FLAGS="--with-unixodbc=/usr/local/opt --disable-glib"
+      - YACC="/usr/local/opt/bison/bin/bison"
   - compiler: clang
     os: osx
     osx_image: xcode11.4
@@ -111,8 +117,10 @@ jobs:
         packages:
         - unixodbc
         - glib
+        - bison
     env:
       - CONFIGURE_FLAGS="--with-unixodbc=/usr/local/opt --enable-glib"
+      - YACC="/usr/local/opt/bison/bin/bison"
   - compiler: gcc
     os: osx
     osx_image: xcode11.4
@@ -120,8 +128,10 @@ jobs:
       homebrew:
         packages:
         - libiodbc
+        - bison
     env:
       - CONFIGURE_FLAGS="--with-iodbc=/usr/local/opt --disable-glib"
+      - YACC="/usr/local/opt/bison/bin/bison"
   - compiler: gcc
     os: osx
     osx_image: xcode11.4
@@ -129,8 +139,10 @@ jobs:
       homebrew:
         packages:
         - unixodbc
+        - bison
     env:
       - CONFIGURE_FLAGS="--with-unixodbc=/usr/local/opt --disable-glib"
+      - YACC="/usr/local/opt/bison/bin/bison"
 
 before_script:
   - autoreconf -i -f -Wno-portability
@@ -150,4 +162,5 @@ script:
   - ./src/util/mdb-tables test/data/nwind.mdb
   - ./src/util/mdb-ver test/data/ASampleDatabase.accdb
   - ./src/util/mdb-ver test/data/nwind.mdb
+  - ./src/util/mdb-sql -i test/sql/nwind.sql test/data/nwind.mdb
   - env MDBPATH=test/data ./src/odbc/unittest

@@ -36,8 +36,6 @@
 
 #include <locale.h>
 
-char *g_input_ptr;
-
 /* Prevent warnings from -Wmissing-prototypes.  */
 #ifdef YYPARSE_PARAM
 #if defined __STDC__ || defined __cplusplus
@@ -67,19 +65,6 @@ va_list ap;
 	fprintf(stderr, "%s\n", sql->error_msg);
 }
 
-int mdb_sql_yyinput(char *buf, int need)
-{
-int cplen, have;
-
-	have = strlen(g_input_ptr);
-	cplen = need > have ? have : need;
-	
-	if (cplen>0) {
-		memcpy(buf, g_input_ptr, cplen);
-		g_input_ptr += cplen;
-	} 
-	return cplen;
-}
 MdbSQL *mdb_sql_init()
 {
 MdbSQL *sql;
@@ -90,6 +75,7 @@ MdbSQL *sql;
 	sql->sarg_tree = NULL;
 	sql->sarg_stack = NULL;
 	sql->max_rows = -1;
+	sql->limit = -1;
 
 	return sql;
 }
@@ -112,14 +98,9 @@ mdb_sql_run_query (MdbSQL* sql, const gchar* querystr) {
 	g_return_val_if_fail (sql, NULL);
 	g_return_val_if_fail (querystr, NULL);
 
-	g_input_ptr = (gchar*) querystr;
-
-	/* calls to yyparse should be serialized for thread safety */
-
-	/* begin unsafe */
-	_mdb_sql (sql);
 	sql->error_msg[0]='\0';
-	if (yyparse()) {
+
+	if (parse_sql (sql, querystr)) {
 		/* end unsafe */
 		mdb_sql_error (sql, _("Could not parse '%s' command"), querystr);
 		mdb_sql_reset (sql);
@@ -590,7 +571,7 @@ void mdb_sql_reset(MdbSQL *sql)
 	sql->sel_count = 0;
 	sql->max_rows = -1;
 	sql->row_count = 0;
-	sql->limit = 0;
+	sql->limit = -1;
 }
 static void print_break(int sz, int first)
 {
@@ -806,6 +787,7 @@ int found = 0;
 		mdb_add_row_to_pg(ttable,row_buffer, row_size);
 		ttable->num_rows++;
 		sql->cur_table = ttable;
+		mdb_free_tabledef(table);
 		return;
 	}
 
@@ -832,6 +814,8 @@ int found = 0;
 		}
 		if (!found) {
 			mdb_sql_error(sql, "Column %s not found",sqlcol->name);
+			mdb_index_scan_free(table);
+			mdb_free_tabledef(table);
 			mdb_sql_reset(sql);
 			return;
 		}
@@ -883,7 +867,7 @@ mdb_sql_fetch_row(MdbSQL *sql, MdbTableDef *table)
 {
 	int rc = mdb_fetch_row(table);
 	if (rc) {
-		if (sql->row_count + 1 > sql->limit) {
+		if (sql->limit >= 0 && sql->row_count + 1 > sql->limit) {
 			return 0;
 		}
 		sql->row_count++;

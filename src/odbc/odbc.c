@@ -1081,6 +1081,9 @@ SQLRETURN SQL_API SQLFetch(
 		//}
 		//cur = cur->next;
 	//}
+	if ( stmt->sql->limit >= 0 && stmt->rows_affected == stmt->sql->limit ) {
+		return SQL_NO_DATA_FOUND;
+	}
 
 	if (mdb_fetch_row(stmt->sql->cur_table)) {
 		stmt->rows_affected++;
@@ -1331,9 +1334,14 @@ SQLRETURN SQL_API SQLColumns(
 	for (i=0; i<mdb->num_catalog; i++) {
      		entry = g_ptr_array_index(mdb->catalog, i);
 		/* TODO: Do more advanced matching */
-		if (g_ascii_strcasecmp((char*)szTableName, entry->object_name) != 0)
+		if (entry->object_type != MDB_TABLE || g_ascii_strcasecmp((char*)szTableName, entry->object_name) != 0)
 			continue;
 		table = mdb_read_table(entry);
+		if ( !table )
+		{
+			LogError ("Could not read table '%s'", szTableName);
+			return SQL_ERROR;
+		}
 		mdb_read_columns(table);
 		for (j=0; j<table->num_cols; j++) {
 			col = g_ptr_array_index(table->columns, j);
@@ -1608,8 +1616,8 @@ SQLRETURN SQL_API SQLGetData(
 		default: /* FIXME here we assume fCType == SQL_C_CHAR */
 		to_c_char:
 		{
-			static size_t len = 0;
-			static char *str = NULL;
+			static __thread size_t len = 0;
+			static __thread char *str = NULL;
 
 			if (col->col_type == MDB_OLE) {
 				if (stmt->pos == 0) {
