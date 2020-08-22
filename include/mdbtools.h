@@ -56,10 +56,9 @@
 #define MDB_MEMO_OVERHEAD 12
 #define MDB_BIND_SIZE 16384
 
-// Theses 2 atrbutes are not supported by all compilers:
+// This attribute is not supported by all compilers:
 // M$VC see http://stackoverflow.com/questions/1113409/attribute-constructor-equivalent-in-vc
 #define MDB_DEPRECATED(type, funcname) type __attribute__((deprecated)) funcname
-#define MDB_CONSTRUCTOR(funcname) void __attribute__((constructor)) funcname(void)
 
 enum {
 	MDB_PAGE_DB = 0,
@@ -207,9 +206,9 @@ typedef struct {
 		
 typedef struct {
 	guint32 capabilities; /* see MDB_SHEXP_* */
-	MdbBackendType *types_table;
-	MdbBackendType *type_shortdate;
-	MdbBackendType *type_autonum;
+	const MdbBackendType *types_table;
+	const MdbBackendType *type_shortdate;
+	const MdbBackendType *type_autonum;
 	const char *short_now;
 	const char *long_now;
 	const char *charset_statement;
@@ -231,8 +230,6 @@ typedef struct {
 	guint32		jet_version;
 	guint32		db_key;
 	char		db_passwd[14];
-	MdbBackend	*default_backend;
-	char			*backend_name;
 	MdbStatistics	*stats;
 	/* free map */
 	int  map_sz;
@@ -270,12 +267,20 @@ typedef struct {
 	unsigned int  cur_pos;
 	unsigned char pg_buf[MDB_PGSIZE];
 	unsigned char alt_pg_buf[MDB_PGSIZE];
+	MdbFormatConstants *fmt;
+    char date_fmt[64];
+    const char *boolean_false_value;
+    const char *boolean_true_value;
 	unsigned int  num_catalog;
+
+    // Non-cloneable fields start here
 	GPtrArray	*catalog;
 	MdbBackend	*default_backend;
 	char		*backend_name;
-	MdbFormatConstants *fmt;
+	struct S_MdbTableDef *relationships_table;
+	char        *relationships_values[5];
 	MdbStatistics *stats;
+    GHashTable *backends;
 #ifdef HAVE_ICONV
 	iconv_t	iconv_in;
 	iconv_t	iconv_out;
@@ -467,7 +472,7 @@ void mdb_free_catalog(MdbHandle *mdb);
 GPtrArray *mdb_read_catalog(MdbHandle *mdb, int obj_type);
 MdbCatalogEntry *mdb_get_catalogentry_by_name(MdbHandle *mdb, const gchar* name);
 void mdb_dump_catalog(MdbHandle *mdb, int obj_type);
-char *mdb_get_objtype_string(int obj_type);
+const char *mdb_get_objtype_string(int obj_type);
 
 /* table.c */
 MdbTableDef *mdb_alloc_tabledef(MdbCatalogEntry *entry);
@@ -492,6 +497,7 @@ int mdb_bind_column_by_name(MdbTableDef *table, gchar *col_name, void *bind_ptr,
 void mdb_data_dump(MdbTableDef *table);
 void mdb_date_to_tm(double td, struct tm *t);
 void mdb_tm_to_date(struct tm *t, double *td);
+char *mdb_uuid_to_string(const void *buf, int start);
 void mdb_bind_column(MdbTableDef *table, int col_num, void *bind_ptr, int *len_ptr);
 int mdb_rewind_table(MdbTableDef *table);
 int mdb_fetch_row(MdbTableDef *table);
@@ -505,8 +511,9 @@ int mdb_col_disp_size(MdbColumn *col);
 size_t mdb_ole_read_next(MdbHandle *mdb, MdbColumn *col, void *ole_ptr);
 size_t mdb_ole_read(MdbHandle *mdb, MdbColumn *col, void *ole_ptr, size_t chunk_size);
 void* mdb_ole_read_full(MdbHandle *mdb, MdbColumn *col, size_t *size);
-void mdb_set_date_fmt(const char *);
-void mdb_set_boolean_fmt_words(void);
+void mdb_set_date_fmt(MdbHandle *mdb, const char *);
+void mdb_set_boolean_fmt_words(MdbHandle *mdb);
+void mdb_set_boolean_fmt_numbers(MdbHandle *mdb);
 int mdb_read_row(MdbTableDef *table, unsigned int row);
 
 /* dump.c */
@@ -515,12 +522,12 @@ void mdb_buffer_dump(const void *buf, off_t start, size_t len);
 /* backend.c */
 MDB_DEPRECATED(char*, mdb_get_coltype_string(MdbBackend *backend, int col_type));
 MDB_DEPRECATED(int, mdb_coltype_takes_length(MdbBackend *backend, int col_type));
+void mdb_init_backends(MdbHandle *mdb);
+void mdb_remove_backends(MdbHandle *mdb);
 const MdbBackendType* mdb_get_colbacktype(const MdbColumn *col);
 const char* mdb_get_colbacktype_string(const MdbColumn *col);
 int mdb_colbacktype_takes_length(const MdbColumn *col);
-MDB_DEPRECATED(void, mdb_init_backends(void));
-void mdb_register_backend(char *backend_name, guint32 capabilities, MdbBackendType *backend_type, MdbBackendType *type_shortdate, MdbBackendType *type_autonum, const char *short_now, const char *long_now, const char *charset_statement, const char *drop_statement, const char *constaint_not_empty_statement, const char *column_comment_statement, const char *table_comment_statement, gchar* (*quote_schema_name)(const gchar*, const gchar*));
-MDB_DEPRECATED(void, mdb_remove_backends(void));
+void mdb_register_backend(MdbHandle *mdb, char *backend_name, guint32 capabilities, const MdbBackendType *backend_type, const MdbBackendType *type_shortdate, const MdbBackendType *type_autonum, const char *short_now, const char *long_now, const char *charset_statement, const char *drop_statement, const char *constaint_not_empty_statement, const char *column_comment_statement, const char *table_comment_statement, gchar* (*quote_schema_name)(const gchar*, const gchar*));
 int  mdb_set_default_backend(MdbHandle *mdb, const char *backend_name);
 void mdb_print_schema(MdbHandle *mdb, FILE *outfile, char *tabname, char *dbnamespace, guint32 export_options);
 
