@@ -392,7 +392,10 @@ static ssize_t _mdb_read_pg(MdbHandle *mdb, void *pg_buf, unsigned long pg)
 	ssize_t len;
 	off_t offset = pg * mdb->fmt->pg_size;
 
-    fseek(mdb->f->stream, 0, SEEK_END);
+    if (fseek(mdb->f->stream, 0, SEEK_END) == -1) {
+        fprintf(stderr, "Unable to seek to end of file\n");
+        return 0;
+    }
     if (ftello(mdb->f->stream) < offset) { 
         fprintf(stderr,"offset %" PRIu64 " is beyond EOF\n",(uint64_t)offset);
         return 0;
@@ -400,18 +403,16 @@ static ssize_t _mdb_read_pg(MdbHandle *mdb, void *pg_buf, unsigned long pg)
 	if (mdb->stats && mdb->stats->collect) 
 		mdb->stats->pg_reads++;
 
-	fseek(mdb->f->stream, offset, SEEK_SET);
+	if (fseek(mdb->f->stream, offset, SEEK_SET) == -1) {
+        fprintf(stderr, "Unable to seek to page %lu\n", pg);
+        return 0;
+    }
 	len = fread(pg_buf, 1, mdb->fmt->pg_size, mdb->f->stream);
 	if (ferror(mdb->f->stream)) {
 		perror("read");
 		return 0;
 	}
     memset(pg_buf, 0, mdb->fmt->pg_size - len);
-    /*
-	else if (len<mdb->fmt->pg_size) {
-		// fprintf(stderr,"EOF reached %d/%d bytes returned.\n",len, mdb->fmt->pg_size);
-		return 0;
-	} */
 	/*
 	 * unencrypt the page if necessary.
 	 * it might make sense to cache the unencrypted data blocks?
