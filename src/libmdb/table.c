@@ -70,8 +70,8 @@ MdbTableDef *mdb_read_table(MdbCatalogEntry *entry)
         return NULL;
     }
 	if (mdb_get_byte(pg_buf, 0) != 0x02) {
-        fprintf(stderr, "mdb_read_table: Page %lu is not a valid table definition page (First byte = 0x%02X, expected 0x02)\n",
-                entry->table_pg, mdb_get_byte(pg_buf, 0));
+        fprintf(stderr, "mdb_read_table: Page %lu [size=%d] is not a valid table definition page (First byte = 0x%02X, expected 0x02)\n",
+                entry->table_pg, (int)fmt->pg_size, mdb_get_byte(pg_buf, 0));
 		return NULL;
     }
 	table = mdb_alloc_tabledef(entry);
