@@ -36,7 +36,9 @@ int main(int argc, char **argv) {
     if (!mdb) {
         return 1;
     }
-	mdb_read_catalog(mdb, MDB_TABLE);
+	if (!mdb_read_catalog(mdb, MDB_TABLE)) {
+        return 1;
+    }
 	for (i = 0; i < mdb->num_catalog; i++) {
 		entry = g_ptr_array_index(mdb->catalog, i);
 		if (entry->object_type == MDB_TABLE && !g_ascii_strcasecmp(entry->object_name, argv[2])) {
