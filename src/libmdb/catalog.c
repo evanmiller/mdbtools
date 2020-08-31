@@ -104,7 +104,8 @@ GPtrArray *mdb_read_catalog (MdbHandle *mdb, int objtype)
         mdb_bind_column_by_name(table, "Name", obj_name, NULL) == -1 ||
         mdb_bind_column_by_name(table, "Type", obj_type, NULL) == -1 ||
         mdb_bind_column_by_name(table, "Flags", obj_flags, NULL) == -1) {
-        fprintf(stderr, "Unable to bind columns from table %s\n", msysobj.object_name);
+        fprintf(stderr, "Unable to bind columns from table %s (%d columns found)\n",
+                msysobj.object_name, table->num_cols);
         mdb_free_catalog(mdb);
         goto cleanup;
     }
