@@ -284,9 +284,9 @@ MdbHandle *mdb_open(const char *filename, MdbFileFlags flags)
 		return NULL; 
 	}
 #ifdef _WIN32
-    char *mode = (flags & MDB_WRITABLE) ? "rb+" : "r+";
+    char *mode = (flags & MDB_WRITABLE) ? "rb+" : "rb";
 #else
-    char *mode = (flags & MDB_WRITABLE) ? "rb" : "r";
+    char *mode = (flags & MDB_WRITABLE) ? "r+" : "r";
 #endif
 
     if ((file = fopen(filepath, mode)) == NULL) {
