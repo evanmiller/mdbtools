@@ -65,11 +65,11 @@ int noexec = 0;
 #ifndef HAVE_LIBREADLINE
 char *readline(char *prompt)
 {
-char *buf, line[1000];
+char line[1000];
 int i = 0;
 
-	puts(prompt);
-	if (! fgets(line,1000,stdin)) {
+	fputs(prompt, stdout);
+	if (!fgets(line, sizeof(line), stdin)) {
 		return NULL;
 	}
 	for (i=strlen(line);i>0;i--) {
@@ -78,10 +78,8 @@ int i = 0;
 			break;
 		}
 	}
-	buf = (char *) malloc(strlen(line)+1);
-	strcpy(buf,line);
 
-	return buf;
+	return g_strdup(line);
 }
 #endif
 
@@ -400,7 +398,7 @@ main(int argc, char **argv)
 
 	/* give the buffer an initial size */
 	bufsz = 4096;
-	mybuf = (char *) g_malloc(bufsz);
+	mybuf = g_malloc(bufsz);
 	mybuf[0]='\0';
 
 	while (1) {
@@ -425,7 +423,7 @@ main(int argc, char **argv)
 			} else if (s[strlen(s)-1]=='\n')
 				s[strlen(s)-1]=0;
 		} else {
-			sprintf(prompt, "%d => ", line);
+			snprintf(prompt, sizeof(prompt), "%d => ", line);
 			s=readline(prompt);
 			if (!s)
 				break;

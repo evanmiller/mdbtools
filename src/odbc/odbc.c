@@ -478,7 +478,7 @@ struct _hdbc* dbc;
 
 	TRACE("SQLAllocConnect");
 	env = (struct _henv *) henv;
-	dbc = (SQLHDBC) g_malloc0(sizeof(struct _hdbc));
+	dbc = g_malloc0(sizeof(struct _hdbc));
 	dbc->henv=env;
 	g_ptr_array_add(env->connections, dbc);
 	dbc->params = NewConnectParams ();
@@ -498,7 +498,7 @@ SQLRETURN SQL_API SQLAllocEnv(
 struct _henv *env;
 
 	TRACE("SQLAllocEnv");
-	env = (SQLHENV) g_malloc0(sizeof(struct _henv));
+	env = g_malloc0(sizeof(struct _henv));
 	env->connections = g_ptr_array_new();
 	*phenv=env;
 	return SQL_SUCCESS;
@@ -514,7 +514,7 @@ SQLRETURN SQL_API SQLAllocStmt(
 	TRACE("SQLAllocStmt");
 	dbc = (struct _hdbc *) hdbc;
 
-	stmt = (SQLHSTMT) g_malloc0(sizeof(struct _hstmt));
+	stmt = g_malloc0(sizeof(struct _hstmt));
 	stmt->hdbc=dbc;
 	g_ptr_array_add(dbc->statements, stmt);
 	stmt->sql = mdb_sql_init();
@@ -572,7 +572,7 @@ SQLRETURN SQL_API SQLBindCol(
    		cur->varaddr = (char *) rgbValue;
 	} else {
 		/* didn't find it create a new one */
-		newitem = (struct _sql_bind_info *) g_malloc0(sizeof(struct _sql_bind_info));
+		newitem = g_malloc0(sizeof(struct _sql_bind_info));
 		newitem->column_number = icol;
 		newitem->column_bindtype = fCType;
    		newitem->column_bindlen = cbValueMax;
@@ -1228,8 +1228,7 @@ SQLRETURN SQL_API SQLPrepare(
 
 	TRACE("SQLPrepare");
 
-	strncpy(stmt->query, (char*)szSqlStr, sqllen);
-	stmt->query[sqllen]='\0';
+	snprintf(stmt->query, sizeof(stmt->query), "%*s", sqllen, (char*)szSqlStr);
 
 	return SQL_SUCCESS;
 }
@@ -1349,9 +1348,9 @@ SQLRETURN SQL_API SQLColumns(
 		for (j=0; j<table->num_cols; j++) {
 			col = g_ptr_array_index(table->columns, j);
 
-			ts2 = mdb_ascii2unicode(mdb, table->name, 0, (char*)t2, MDB_BIND_SIZE);
-			ts3 = mdb_ascii2unicode(mdb, col->name, 0, (char*)t3, MDB_BIND_SIZE);
-			ts5 = mdb_ascii2unicode(mdb, _odbc_get_client_type_name(col), 0,  (char*)t5, MDB_BIND_SIZE);
+			ts2 = mdb_ascii2unicode(mdb, table->name, 0, (char*)t2, sizeof(t2));
+			ts3 = mdb_ascii2unicode(mdb, col->name, 0, (char*)t3, sizeof(t3));
+			ts5 = mdb_ascii2unicode(mdb, _odbc_get_client_type_name(col), 0,  (char*)t5, sizeof(t5));
 
 			nullable = SQL_NO_NULLS;
 			datatype = _odbc_get_client_type(col);
@@ -1938,15 +1937,15 @@ SQLRETURN SQL_API SQLGetInfo(
 	break;
 	case SQL_DBMS_NAME:
 		if (rgbInfoValue)
-			strncpy(rgbInfoValue, "MDBTOOLS", cbInfoValueMax);
+			snprintf(rgbInfoValue, cbInfoValueMax, "%s", "MDBTOOLS");
 		if (pcbInfoValue)
-			*pcbInfoValue = 9;
+			*pcbInfoValue = sizeof("MDBTOOLS");
 	break;
 	case SQL_DBMS_VER:
 		if (rgbInfoValue)
-			strncpy(rgbInfoValue, VERSION, cbInfoValueMax);
+			snprintf(rgbInfoValue, cbInfoValueMax, "%s", VERSION);
 		if (pcbInfoValue)
-			*pcbInfoValue = sizeof(VERSION)+1;
+			*pcbInfoValue = sizeof(VERSION);
 	break;
 	default:
 		if (pcbInfoValue)
@@ -2039,11 +2038,11 @@ SQLRETURN SQL_API SQLGetTypeInfo(
 		if (fSqlType && (fSqlType != type_info[i].data_type))
 			continue;
 
-		ts0 = mdb_ascii2unicode(mdb, (char*)type_info[i].type_name, 0, (char*)t0, MDB_BIND_SIZE);
-		ts3 = mdb_ascii2unicode(mdb, (char*)type_info[i].literal_prefix, 0, (char*)t3, MDB_BIND_SIZE);
-		ts4 = mdb_ascii2unicode(mdb, (char*)type_info[i].literal_suffix, 0, (char*)t4, MDB_BIND_SIZE);
-		ts5 = mdb_ascii2unicode(mdb, (char*)type_info[i].create_params, 0, (char*)t5, MDB_BIND_SIZE);
-		ts12 = mdb_ascii2unicode(mdb, (char*)type_info[i].local_type_name, 0, (char*)t12, MDB_BIND_SIZE);
+		ts0 = mdb_ascii2unicode(mdb, (char*)type_info[i].type_name, 0, (char*)t0, sizeof(t0));
+		ts3 = mdb_ascii2unicode(mdb, (char*)type_info[i].literal_prefix, 0, (char*)t3, sizeof(t3));
+		ts4 = mdb_ascii2unicode(mdb, (char*)type_info[i].literal_suffix, 0, (char*)t4, sizeof(t4));
+		ts5 = mdb_ascii2unicode(mdb, (char*)type_info[i].create_params, 0, (char*)t5, sizeof(t5));
+		ts12 = mdb_ascii2unicode(mdb, (char*)type_info[i].local_type_name, 0, (char*)t12, sizeof(t12));
 
 		FILL_FIELD(&fields[0], t0, ts0);
 		FILL_FIELD(&fields[1],&type_info[i].data_type, 0);
@@ -2195,8 +2194,8 @@ SQLRETURN SQL_API SQLTables( //sz* not used, so Unicode API not required.
 			FILL_FIELD(&fields[j], NULL, 0);
 		}
 
-		ts2 = mdb_ascii2unicode(mdb, entry->object_name, 0, (char*)t2, MDB_BIND_SIZE);
-		ts3 = mdb_ascii2unicode(mdb, table_types[ttype], 0, (char*)t3, MDB_BIND_SIZE);
+		ts2 = mdb_ascii2unicode(mdb, entry->object_name, 0, (char*)t2, sizeof(t2));
+		ts3 = mdb_ascii2unicode(mdb, table_types[ttype], 0, (char*)t3, sizeof(t3));
 
 		FILL_FIELD(&fields[2], t2, ts2);
 		FILL_FIELD(&fields[3], t3, ts3);

@@ -67,11 +67,11 @@ GPtrArray *mdb_read_catalog (MdbHandle *mdb, int objtype)
 {
 	MdbCatalogEntry *entry, msysobj;
 	MdbTableDef *table;
-	char obj_id[256];
-	char obj_name[MDB_MAX_OBJ_NAME];
-	char obj_type[256];
-	char obj_flags[256];
-	char obj_props[MDB_BIND_SIZE];
+	char *obj_id = NULL;
+	char *obj_name = NULL;
+	char *obj_type = NULL;
+	char *obj_flags = NULL;
+	char *obj_props = NULL;
 	int type;
 	int i;
 	MdbColumn *col_props;
@@ -82,12 +82,18 @@ GPtrArray *mdb_read_catalog (MdbHandle *mdb, int objtype)
 	mdb->catalog = g_ptr_array_new();
 	mdb->num_catalog = 0;
 
+	obj_id = malloc(mdb->bind_size);
+	obj_name = malloc(mdb->bind_size);
+	obj_type = malloc(mdb->bind_size);
+	obj_flags = malloc(mdb->bind_size);
+	obj_props = malloc(mdb->bind_size);
+
 	/* dummy up a catalog entry so we may read the table def */
 	memset(&msysobj, 0, sizeof(MdbCatalogEntry));
 	msysobj.mdb = mdb;
 	msysobj.object_type = MDB_TABLE;
 	msysobj.table_pg = 2;
-	strcpy(msysobj.object_name, "MSysObjects");
+	snprintf(msysobj.object_name, sizeof(msysobj.object_name), "%s", "MSysObjects");
 
 	/* mdb_table_dump(&msysobj); */
 
@@ -123,9 +129,9 @@ GPtrArray *mdb_read_catalog (MdbHandle *mdb, int objtype)
 		if (objtype==MDB_ANY || type == objtype) {
 			//fprintf(stderr, "obj_id: %10ld objtype: %-3d (0x%04x) obj_name: %s\n",
 			//	(atol(obj_id) & 0x00FFFFFF), type, type, obj_name);
-			entry = (MdbCatalogEntry *) g_malloc0(sizeof(MdbCatalogEntry));
+			entry = g_malloc0(sizeof(MdbCatalogEntry));
 			entry->mdb = mdb;
-			strcpy(entry->object_name, obj_name);
+			snprintf(entry->object_name, sizeof(entry->object_name), "%s", obj_name);
 			entry->object_type = (type & 0x7F);
 			entry->table_pg = atol(obj_id) & 0x00FFFFFF;
 			entry->flags = atol(obj_flags);
@@ -143,8 +149,14 @@ GPtrArray *mdb_read_catalog (MdbHandle *mdb, int objtype)
 	//mdb_dump_catalog(mdb, MDB_TABLE);
  
 cleanup:
-    if (table)
-        mdb_free_tabledef(table);
+	if (table)
+		mdb_free_tabledef(table);
+
+	free(obj_id);
+	free(obj_name);
+	free(obj_type);
+	free(obj_flags);
+	free(obj_props);
 
     return mdb->catalog;
 }

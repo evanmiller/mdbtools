@@ -1,5 +1,5 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_INIT([mdbtools],[0.9.0],[https://github.com/mdbtools/mdbtools/issues],[],[https://github.com/mdbtools/mdbtools])
+AC_INIT([mdbtools],[0.9.1-beta2],[https://github.com/mdbtools/mdbtools/issues],[],[https://github.com/mdbtools/mdbtools])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_SRCDIR(src/extras/mdb-dump.c)
@@ -7,10 +7,11 @@ AM_INIT_AUTOMAKE([foreign dist-zip])
 
 MDBTOOLS_VERSION_MAJOR=0
 MDBTOOLS_VERSION_MINOR=9
-MDBTOOLS_VERSION_MICRO=0
+MDBTOOLS_VERSION_MICRO=1
 
-# Update this logic when the major version changes
-VERSION_INFO=`expr $MDBTOOLS_VERSION_MINOR - 6`:$MDBTOOLS_VERSION_MICRO
+# Update these numbers with every release
+# See https://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
+VERSION_INFO=3:1:0
 AC_SUBST(VERSION_INFO)
 
 AM_MAINTAINER_MODE([enable])
@@ -36,7 +37,7 @@ AC_CHECK_DECLS([program_invocation_short_name], [], [], [[
 
 dnl Checks for library functions.
 VL_LIB_READLINE
-AC_CHECK_FUNCS(strptime fmemopen gmtime_r wcstombs_l)
+AC_CHECK_FUNCS(strptime fmemopen gmtime_r wcstombs_l vasprintf vasnprintf)
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -73,14 +74,13 @@ if $YACC -V | grep "bison.* 3[.]" >/dev/null 2>&1; then
         YFLAGS="$YFLAGS -Wno-yacc"
     fi
 else
-sql=false
+    AC_MSG_WARN([Bison 3.0+ is not available: SQL disabled.])
+    sql=false
 fi
 
 if test "x$sql" = "xtrue"; then
 	CFLAGS="$CFLAGS -DSQL"
 	OPTDIRS="$OPTDIRS sql"
-else
-	AC_MSG_WARN([Bison 3.0+ is not available: SQL disabled.])
 fi
 
 AM_CONDITIONAL(SQL, test x$sql = xtrue)

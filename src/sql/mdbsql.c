@@ -63,9 +63,7 @@ va_list ap;
 
 MdbSQL *mdb_sql_init()
 {
-MdbSQL *sql;
-
-	sql = (MdbSQL *) g_malloc0(sizeof(MdbSQL));
+MdbSQL *sql = g_malloc0(sizeof(MdbSQL));
 	sql->columns = g_ptr_array_new();
 	sql->tables = g_ptr_array_new();
 	sql->bound_values = g_ptr_array_new();
@@ -408,7 +406,7 @@ mdb_sql_strptime(MdbSQL *sql, char *data, char *format)
 	if (date < 2 && date > 1) date--;
 	if ((pszDate=malloc(16))) {
 		char cLocale=localeconv()->decimal_point[0], *p;
-		sprintf(pszDate, "%lf", date);
+		snprintf(pszDate, 16, "%lf", date);
 		if (cLocale!='.') for (p=pszDate; *p; p++) if (*p==cLocale) *p='.';
 	}
 	return pszDate;
@@ -467,7 +465,6 @@ mdb_sql_eval_expr(MdbSQL *sql, char *const1, int op, char *const2)
 int 
 mdb_sql_add_sarg(MdbSQL *sql, char *col_name, int op, char *constant)
 {
-	int lastchar;
 	char *p;
 	MdbSargNode *node;
 
@@ -485,9 +482,7 @@ mdb_sql_add_sarg(MdbSQL *sql, char *col_name, int op, char *constant)
 	** column definition can be checked for validity
 	*/
 	if (constant[0]=='\'') {
-		lastchar = strlen(constant) > 256 ? 256 : strlen(constant);
-		strncpy(node->value.s, &constant[1], lastchar - 2);;
-		node->value.s[lastchar - 1]='\0';
+		snprintf(node->value.s, sizeof(node->value.s), "%*s", (int)strlen(constant) - 2, &constant[1]);
 		node->val_type = MDB_TEXT;
 	} else if ((p=strchr(constant, '.'))) {
 		*p=localeconv()->decimal_point[0];
@@ -515,9 +510,7 @@ mdb_sql_sel_count(MdbSQL *sql)
 
 int mdb_sql_add_column(MdbSQL *sql, char *column_name)
 {
-	MdbSQLColumn *c;
-
-	c = (MdbSQLColumn *) g_malloc0(sizeof(MdbSQLColumn));
+	MdbSQLColumn *c = g_malloc0(sizeof(MdbSQLColumn));
 	c->name = g_strdup(column_name);
 	g_ptr_array_add(sql->columns, c);
 	sql->num_columns++;
@@ -547,9 +540,7 @@ int mdb_sql_add_function1(MdbSQL *sql, char *func_name, char *arg1)
 }
 int mdb_sql_add_table(MdbSQL *sql, char *table_name)
 {
-	MdbSQLTable *t;
-
-	t = (MdbSQLTable *) g_malloc0(sizeof(MdbSQLTable));
+	MdbSQLTable *t = g_malloc0(sizeof(MdbSQLTable));
 	t->name = g_strdup(table_name);
 	t->alias = NULL;
 	g_ptr_array_add(sql->tables, t);
@@ -652,7 +643,7 @@ void mdb_sql_listtables(MdbSQL *sql)
  		entry = g_ptr_array_index (mdb->catalog, i);
  		if (mdb_is_user_table(entry)) {
 			//col = g_ptr_array_index(table->columns,0);
-			tmpsiz = mdb_ascii2unicode(mdb, entry->object_name, 0, tmpstr, 100);
+			tmpsiz = mdb_ascii2unicode(mdb, entry->object_name, 0, tmpstr, sizeof(tmpstr));
 			mdb_fill_temp_field(&fields[0],tmpstr, tmpsiz, 0,0,0,0);
 			row_size = mdb_pack_row(ttable, row_buffer, 1, fields);
 			mdb_add_row_to_pg(ttable,row_buffer, row_size);
@@ -716,15 +707,15 @@ void mdb_sql_describe_table(MdbSQL *sql)
 	for (i=0;i<table->num_cols;i++) {
 
 		col = g_ptr_array_index(table->columns,i);
-		tmpsiz = mdb_ascii2unicode(mdb, col->name, 0, col_name, 100);
+		tmpsiz = mdb_ascii2unicode(mdb, col->name, 0, col_name, sizeof(col_name));
 		mdb_fill_temp_field(&fields[0],col_name, tmpsiz, 0,0,0,0);
 
-		strcpy(tmpstr, mdb_get_colbacktype_string(col));
-		tmpsiz = mdb_ascii2unicode(mdb, tmpstr, 0, col_type, 100);
+		snprintf(tmpstr, sizeof(tmpstr), "%s", mdb_get_colbacktype_string(col));
+		tmpsiz = mdb_ascii2unicode(mdb, tmpstr, 0, col_type, sizeof(col_type));
 		mdb_fill_temp_field(&fields[1],col_type, tmpsiz, 0,0,0,1);
 
-		sprintf(tmpstr,"%d",col->col_size);
-		tmpsiz = mdb_ascii2unicode(mdb, tmpstr, 0, col_size, 100);
+		snprintf(tmpstr, sizeof(tmpstr), "%d", col->col_size);
+		tmpsiz = mdb_ascii2unicode(mdb, tmpstr, 0, col_size, sizeof(col_size));
 		mdb_fill_temp_field(&fields[2],col_size, tmpsiz, 0,0,0,2);
 
 		row_size = mdb_pack_row(ttable, row_buffer, 3, fields);
@@ -814,8 +805,8 @@ int found = 0;
 		int row_size, tmpsiz;
 
 		mdb_sql_add_temp_col(sql, ttable, 0, "count", MDB_TEXT, 30, 0);
-		sprintf(tmpstr,"%d",table->num_rows);
-		tmpsiz = mdb_ascii2unicode(mdb, tmpstr, 0, row_cnt, 32);
+		snprintf(tmpstr, sizeof(tmpstr), "%d", table->num_rows);
+		tmpsiz = mdb_ascii2unicode(mdb, tmpstr, 0, row_cnt, sizeof(row_cnt));
 		mdb_fill_temp_field(&fields[0],row_cnt, tmpsiz, 0,0,0,0);
 		row_size = mdb_pack_row(ttable, row_buffer, 1, fields);
 		mdb_add_row_to_pg(ttable,row_buffer, row_size);

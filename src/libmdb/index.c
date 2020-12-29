@@ -236,12 +236,12 @@ mdb_read_indices(MdbTableDef *table)
 	//fprintf(stderr, "num_idxs:%d num_real_idxs:%d\n", table->num_idxs, table->num_real_idxs);
 
 	table->num_real_idxs = 0;
-	tmpbuf = (gchar *) g_malloc(idx2_sz);
+	tmpbuf = g_malloc(idx2_sz);
 	for (i=0;i<table->num_idxs;i++) {
 		read_pg_if_n(mdb, tmpbuf, &cur_pos, idx2_sz);
                 //fprintf(stderr, "Index defn: ");
                 //hexdump((unsigned char *)tmpbuf, idx2_sz);
-		pidx = (MdbIndex *) g_malloc0(sizeof(MdbIndex));
+		pidx = g_malloc0(sizeof(MdbIndex));
 		pidx->table = table;
 		pidx->index_num = mdb_get_int16(tmpbuf, 4);
 		pidx->index_type = tmpbuf[type_offset];
@@ -274,7 +274,7 @@ mdb_read_indices(MdbTableDef *table)
 		}
 		tmpbuf = g_malloc(name_sz);
 		read_pg_if_n(mdb, tmpbuf, &cur_pos, name_sz);
-		mdb_unicode2ascii(mdb, tmpbuf, name_sz, pidx->name, MDB_MAX_OBJ_NAME); 
+		mdb_unicode2ascii(mdb, tmpbuf, name_sz, pidx->name, sizeof(pidx->name));
 		g_free(tmpbuf);
 		//fprintf(stderr, "index %d type %d name %s\n", pidx->index_num, pidx->index_type, pidx->name);
 	}

@@ -372,7 +372,7 @@ void mdb_init_backends(MdbHandle *mdb)
 		"COMMENT %s",
 		quote_schema_name_rquotes_merge);
 	mdb_register_backend(mdb, "sqlite",
-		MDB_SHEXP_DROPTABLE|MDB_SHEXP_RELATIONS|MDB_SHEXP_DEFVALUES|MDB_SHEXP_BULK_INSERT,
+		MDB_SHEXP_DROPTABLE|MDB_SHEXP_DEFVALUES|MDB_SHEXP_BULK_INSERT,
 		mdb_sqlite_types, NULL, NULL,
 		"date('now')", "date('now')",
 		"%Y-%m-%d %H:%M:%S",
@@ -399,7 +399,7 @@ void mdb_register_backend(MdbHandle *mdb, char *backend_name, guint32 capabiliti
         const char *per_table_comment_statement,
         gchar* (*quote_schema_name)(const gchar*, const gchar*))
 {
-	MdbBackend *backend = (MdbBackend *) g_malloc0(sizeof(MdbBackend));
+	MdbBackend *backend = g_malloc0(sizeof(MdbBackend));
 	backend->capabilities = capabilities;
 	backend->types_table = backend_type;
 	backend->type_shortdate = type_shortdate;
@@ -493,23 +493,18 @@ mdb_get_index_name(int backend, MdbTableDef *table, MdbIndex *idx)
 	switch(backend){
 		case MDB_BACKEND_MYSQL:
 			// appending table name to index often makes it too long for mysql
-			index_name = malloc(strlen(idx->name)+5+1);
 			if (idx->index_type==1)
 				// for mysql name of primary key is not used
-				strcpy(index_name, "_pkey");
+				index_name = g_strdup("_pkey");
 			else {
-				strcpy(index_name, idx->name);
+				index_name = g_strdup(idx->name);
 			}
 			break;
 		default:
-			index_name = malloc(strlen(table->name)+strlen(idx->name)+5+1);
-			strcpy(index_name, table->name);
 			if (idx->index_type==1)
-				strcat(index_name, "_pkey");
+				index_name = g_strconcat(table->name, "_pkey", NULL);
 			else {
-				strcat(index_name, "_");
-				strcat(index_name, idx->name);
-				strcat(index_name, "_idx");
+				index_name = g_strconcat(table->name, "_", idx->name, "_idx", NULL);
 			}
 	}
 
@@ -657,9 +652,7 @@ mdb_get_relationships(MdbHandle *mdb, const gchar *dbnamespace, const char* tabl
 	} else if (!strcmp(mdb->backend_name, "postgres")) {
 		backend = MDB_BACKEND_POSTGRES;
 	} else if (!mdb->relationships_table) {
-        return (char *) g_strconcat(
-                "-- relationships are not implemented for ",
-                mdb->backend_name, "\n", NULL);
+		return NULL;
 	}
 
 	if (!mdb->relationships_table) {
@@ -671,7 +664,7 @@ mdb_get_relationships(MdbHandle *mdb, const gchar *dbnamespace, const char* tabl
 
 		mdb_read_columns(mdb->relationships_table);
 		for (i=0;i<5;i++) {
-			bound[i] = (char *) g_malloc0(mdb->bind_size);
+			bound[i] = g_malloc0(mdb->bind_size);
 		}
 		mdb_bind_column_by_name(mdb->relationships_table, "szColumn", bound[0], NULL);
 		mdb_bind_column_by_name(mdb->relationships_table, "szObject", bound[1], NULL);
@@ -993,9 +986,16 @@ mdb_print_schema(MdbHandle *mdb, FILE *outfile, char *tabname, char *dbnamespace
 
 	if (export_options & MDB_SHEXP_RELATIONS) {
 		fputs ("-- CREATE Relationships ...\n", outfile);
-		while ((the_relation=mdb_get_relationships(mdb, dbnamespace, tabname)) != NULL) {
-			fputs(the_relation, outfile);
-			g_free(the_relation);
+		the_relation=mdb_get_relationships(mdb, dbnamespace, tabname);
+		if (!the_relation) {
+			fputs("-- relationships are not implemented for ", outfile);
+			fputs(mdb->backend_name, outfile);
+			fputs("\n", outfile);
+		} else {
+			do {
+				fputs(the_relation, outfile);
+				g_free(the_relation);
+			} while ((the_relation=mdb_get_relationships(mdb, dbnamespace, tabname)) != NULL);
 		}
 	}
 }
@@ -1004,48 +1004,66 @@ mdb_print_schema(MdbHandle *mdb, FILE *outfile, char *tabname, char *dbnamespace
 #define is_quote_type(x) (is_binary_type(x) || x==MDB_TEXT || x==MDB_MEMO || x==MDB_DATETIME)
 //#define DONT_ESCAPE_ESCAPE
 void
-mdb_print_col(FILE *outfile, gchar *col_val, int quote_text, int col_type, int bin_len, char *quote_char, char *escape_char, int bin_mode)
+mdb_print_col(FILE *outfile, gchar *col_val, int quote_text, int col_type, int bin_len,
+		char *quote_char, char *escape_char, int flags)
 /* quote_text: Don't quote if 0.
  */
 {
 	size_t quote_len = strlen(quote_char); /* multibyte */
 
 	size_t orig_escape_len = escape_char ? strlen(escape_char) : 0;
+	int quoting = quote_text && is_quote_type(col_type);
+    int bin_mode = (flags & 0x0F);
+    int escape_cr_lf = !!(flags & MDB_EXPORT_ESCAPE_CONTROL_CHARS);
 
 	/* double the quote char if no escape char passed */
 	if (!escape_char)
 		escape_char = quote_char;
 
-	if (quote_text && is_quote_type(col_type)) {
+	if (quoting)
 		fputs(quote_char, outfile);
-		while (1) {
-			if (is_binary_type(col_type)) {
-				if (bin_mode == MDB_BINEXPORT_STRIP)
-					break;
-				if (!bin_len--)
-					break;
-			} else /* use \0 sentry */
-				if (!*col_val)
-					break;
 
-			int is_binary_hex_col = is_binary_type(col_type) && bin_mode == MDB_BINEXPORT_HEXADECIMAL;
+	while (1) {
+		if (is_binary_type(col_type)) {
+			if (bin_mode == MDB_EXPORT_BINARY_STRIP)
+				break;
+			if (!bin_len--)
+				break;
+		} else /* use \0 sentry */
+			if (!*col_val)
+				break;
 
-			if (quote_len && !strncmp(col_val, quote_char, quote_len) && !is_binary_hex_col) {
-				fprintf(outfile, "%s%s", escape_char, quote_char);
-				col_val += quote_len;
+		if (is_binary_type(col_type) && bin_mode == MDB_EXPORT_BINARY_OCTAL) {
+			fprintf(outfile, "\\%03o", *(unsigned char*)col_val++);
+		} else if (is_binary_type(col_type) && bin_mode == MDB_EXPORT_BINARY_HEXADECIMAL) {
+			fprintf(outfile, "%02X", *(unsigned char*)col_val++);
+		} else if (quoting && quote_len && !strncmp(col_val, quote_char, quote_len)) {
+			fprintf(outfile, "%s%s", escape_char, quote_char);
+			col_val += quote_len;
 #ifndef DONT_ESCAPE_ESCAPE
-			} else if (orig_escape_len && !strncmp(col_val, escape_char, orig_escape_len) && !is_binary_hex_col) {
-				fprintf(outfile, "%s%s", escape_char, escape_char);
-				col_val += orig_escape_len;
+		} else if (quoting && orig_escape_len && !strncmp(col_val, escape_char, orig_escape_len)) {
+			fprintf(outfile, "%s%s", escape_char, escape_char);
+			col_val += orig_escape_len;
 #endif
-			} else if (is_binary_type(col_type) && bin_mode == MDB_BINEXPORT_OCTAL) {
-				fprintf(outfile, "\\%03o", *(unsigned char*)col_val++);
-			} else if (is_binary_hex_col) {
-				fprintf(outfile, "%02X", *(unsigned char*)col_val++);
-			} else
-				putc(*col_val++, outfile);
-		}
+		} else if (escape_cr_lf && is_quote_type(col_type) && *col_val=='\r') {
+			col_val++;
+			putc('\\', outfile);
+			putc('r', outfile);
+		} else if (escape_cr_lf && is_quote_type(col_type) && *col_val=='\n') {
+			col_val++;
+			putc('\\', outfile);
+			putc('n', outfile);
+		} else if (escape_cr_lf && is_quote_type(col_type) && *col_val=='\t') {
+			col_val++;
+			putc('\\', outfile);
+			putc('t', outfile);
+		} else if (escape_cr_lf && is_quote_type(col_type) && *col_val=='\\') {
+			col_val++;
+			putc('\\', outfile);
+			putc('\\', outfile);
+		} else
+			putc(*col_val++, outfile);
+	}
+	if (quoting)
 		fputs(quote_char, outfile);
-	} else
-		fputs(col_val, outfile);
 }
