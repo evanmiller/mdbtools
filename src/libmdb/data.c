@@ -34,6 +34,17 @@ static char *mdb_date_to_string(MdbHandle *mdb, const char *fmt, void *buf, int 
 static size_t mdb_copy_ole(MdbHandle *mdb, void *dest, int start, int size);
 #endif
 
+#ifndef HAVE_REALLOCF
+static void *reallocf(void *ptr, size_t len) {
+	void *ptr2 = realloc(ptr, len);
+	if (!ptr2) {
+		free(ptr);
+		return NULL;
+	}
+	return ptr2;
+}
+#endif
+
 static const int noleap_cal[] = {0,31,59,90,120,151,181,212,243,273,304,334,365};
 static const int leap_cal[]   = {0,31,60,91,121,152,182,213,244,274,305,335,366};
 
@@ -77,6 +88,8 @@ int mdb_bind_column(MdbTableDef *table, int col_num, void *bind_ptr, int *len_pt
 {
 	MdbColumn *col = NULL;
 
+	if (!table->columns)
+		return -1;
 	/* 
 	** the column arrary is 0 based, so decrement to get 1 based parameter 
 	*/
@@ -104,6 +117,9 @@ mdb_bind_column_by_name(MdbTableDef *table, gchar *col_name, void *bind_ptr, int
 	unsigned int i;
 	int col_num = -1;
 	MdbColumn *col;
+
+	if (!table->columns)
+		return -1;
 	
 	for (i=0;i<table->num_cols;i++) {
 		col=g_ptr_array_index(table->columns,i);
@@ -304,7 +320,7 @@ int mdb_read_row(MdbTableDef *table, unsigned int row)
 	MdbField *fields;
 	int num_fields;
 
-	if (table->num_cols == 0)
+	if (table->num_cols == 0 || !table->columns)
 		return 0;
 
 	if (mdb_find_row(mdb, row, &row_start, &row_size) == -1 || row_size == 0) {
@@ -395,6 +411,8 @@ int mdb_read_next_dpg(MdbTableDef *table)
 			break; /* unknow map type: goto fallback */
 		if (!next_pg)
 			return 0;
+		if ((guint32)next_pg == table->cur_phys_pg)
+			return 0; /* Infinite loop */
 
 		if (!mdb_read_pg(mdb, next_pg)) {
 			fprintf(stderr, "error: reading page %d failed.\n", next_pg);
@@ -660,7 +678,10 @@ mdb_ole_read_full(MdbHandle *mdb, MdbColumn *col, size_t *size)
 	while ((len = mdb_ole_read_next(mdb, col, ole_ptr))) {
 		if (pos+len >= result_buffer_size) {
 			result_buffer_size += OLE_BUFFER_SIZE;
-			result = realloc(result, result_buffer_size);
+			if ((result = reallocf(result, result_buffer_size)) == NULL) {
+				fprintf(stderr, "Out of memory while reading OLE object\n");
+				return NULL;
+			}
 		}
 		memcpy(result + pos, col->bind_ptr, len);
 		pos += len;
